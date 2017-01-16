@@ -1,0 +1,72 @@
+version: '2'
+services:
+  postgresql:
+    restart: always
+    build: ./postgresql/
+    env_file: ./postgresql/.env
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql
+    ports:
+      - "5433:5432"
+
+  nginx:
+    restart: always
+    build: ./nginx/
+    ports:
+      - "80:80"
+    volumes:
+      - ../src/static1:/usr/src/app/static
+      - ../src/media:/usr/src/app/media
+      - ./data/nginx:/var/log/nginx
+    depends_on:
+      - web
+
+  elasticsearch:
+    build: ./elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+
+  redis:
+    image: redis
+    ports:
+      - "6379"
+
+  web:
+    restart: always
+    build:
+      context: ./web/
+    env_file: ./postgresql/.env
+    command: /opt/web_start.sh
+    depends_on:
+      - postgresql
+      - elasticsearch
+    volumes:
+      - ../src:/opt/project
+      - ./data/env:/opt/project/env
+      - ../src/static:/opt/project/static
+      - ../src/media:/opt/project/media
+    ports:
+      - "8008:8000"
+
+  worker:
+    build: ./web/
+    command: celery -A ispeak_crmm worker -l info
+    links:
+      - postgresql
+      - redis
+    volumes:
+      - ../src:/opt/project
+
+  flower:
+    build: ./web/
+    command: celery -A ispeak_crmm flower
+    links:
+      - postgresql
+      - redis
+      - worker
+    volumes:
+      - ../src:/opt/project
+    ports:
+      - "5555:5555"
+

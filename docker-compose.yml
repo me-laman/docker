@@ -1,0 +1,87 @@
+version: '2'
+services:
+  web:
+    restart: always
+    build: ./web/
+    command: /usr/sbin/sshd -D
+    environment:
+      SELENIUM_HOST: http://selenium:4444/wd/hub
+      TEST_SELENIUM: 'yes'
+    env_file: ./postgresql/.env
+    depends_on:
+      - selenium
+      - postgresql
+      - elasticsearch
+    volumes:
+      - ../src:/opt/project
+      - ./data/env:/opt/project/env
+      - ../src/static:/opt/project/static
+      - ../src/media:/opt/project/media
+    ports:
+      - "2221:22"
+      - "8008:8000"
+
+  worker:
+    build: ./web/
+    command: celery -A ispeak_crmm worker -l info
+    links:
+      - postgresql
+      - redis
+    volumes:
+      - ../src:/opt/project
+
+  flower:
+    build: ./web/
+    restart: always
+    command: celery -A ispeak_crmm flower
+    links:
+      - postgresql
+      - redis
+      - worker
+    depends_on:
+      - worker
+      - redis
+    volumes:
+      - ../src:/opt/project
+    ports:
+      - "5555:5555"
+
+  postgresql:
+    restart: always
+    build: ./postgresql/
+    env_file: ./postgresql/.env
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql
+    ports:
+      - "5433:5432"
+
+  nginx:
+    restart: always
+    build: ./nginx/
+    ports:
+      - "8001:80"
+    volumes:
+      - ../src/static1:/usr/src/app/static
+      - ../src/media:/usr/src/app/media
+      - ./data/nginx:/var/log/nginx
+
+  selenium:
+    restart: always
+    image: selenium/standalone-firefox
+    ports:
+      - "5901:5900"
+
+  elasticsearch:
+    restart: always
+    build: ./elasticsearch
+    volumes:
+      - ./data/elastic:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+
+  redis:
+    image: redis
+    ports:
+        - "6379"
+
